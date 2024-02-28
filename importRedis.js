@@ -5,6 +5,7 @@ import {
 } from 'node:fs/promises';
 import {
   join,
+  resolve,
 } from 'node:path';
 
 import {
@@ -18,6 +19,8 @@ import {
   ar2Float32Array,
 } from './src/redis.js';
 
+import validate from './src/validate-dataset.js';
+
 let redis = null;
 
 //------------------------------------------------------------------------------
@@ -26,44 +29,66 @@ async function main() {
     folder,
   } = await parseArgs();
 
-  const files = await readdir(folder);
   redis = await initRedis();
   await getIndex(true);
 
-  console.log(`Found ${chalk.cyan(files.length)} documents, starting import.`);
+  const rootFolder = resolve(process.cwd(), folder);
+  const context = {
+    succeeded: 0,
+    skipped: 0,
+    failed: 0,
+  };
 
-  let succeeded = 0;
-  let skipped = 0;
-  let failed = 0;
-  for (const file of files) {
-    process.stdout.write(`${chalk.cyan(file)}... `);
-    const filename = join(folder, file);
-    try {
-      const { key, value } = JSON.parse(await readFile(filename, 'utf8'));
-      if (!key) {
-        throw new Error('Empty key');
-      }
-      if (!value || (typeof value !== 'object')) {
-        throw new Error('Invalid value');
-      }
-      value.embedding = ar2Float32Array(value.embedding);
-      await redis.hSet(key, value);
-      ++succeeded;
-      process.stdout.write(`${chalk.green('Ok')}.\n`);
-    } catch (err) {
-      ++failed;
-      process.stdout.write(`${chalk.red('Failed:')} ${err.message}\n`);
-    }
-  }
+  await processFolder(rootFolder, '.', context);
 
-  process.stdout.write(`${chalk.whiteBright('Finished')}: ${chalk.greenBright(succeeded)} documents imported`);
-  if (failed > 0) {
-    process.stdout.write(`, ${chalk.redBright(failed)} failed`);
+  process.stdout.write(`${chalk.whiteBright('Finished')}: ${chalk.greenBright(context.succeeded)} documents imported.`);
+  if (context.failed > 0) {
+    process.stdout.write(`, ${chalk.redBright(context.failed)} failed`);
   }
-  if (skipped > 0) {
-    process.stdout.write(`, ${chalk.yellowBright(skipped)} skipped`);
+  if (context.skipped > 0) {
+    process.stdout.write(`, ${chalk.yellowBright(context.skipped)} skipped`);
   }
   process.stdout.write(`.\n`);
+}
+
+//------------------------------------------------------------------------------
+async function processFolder(rootFolder, relativePath, context) {
+  const folderIn = join(rootFolder, relativePath);
+
+  const files = await readdir(folderIn, { withFileTypes: true });
+  for (const file of files) {
+    const fileRelPath = join(relativePath, file.name);
+    if (file.isDirectory()) {
+      await processFolder(rootFolder, fileRelPath, context);
+    } else {
+      await processFile(rootFolder, fileRelPath, context);
+/////////////////////////////////////
+return;
+/////////////////////////////////////
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
+async function processFile(rootFolder, relativePath, context) {
+  const fileAbs = join(rootFolder, relativePath);
+  process.stdout.write(`${chalk.cyan(relativePath)}... `);
+  try {
+    const { key, value } = JSON.parse(await readFile(fileAbs, 'utf8'));
+    if (!key) {
+      throw new Error('Empty key');
+    }
+    const parsed = validate(value);
+    parsed.date = parsed.date.getTime();
+    parsed.embedding = ar2Float32Array(parsed.embedding);
+    console.log(parsed);
+    await redis.hSet(key, parsed);
+    ++context.succeeded;
+    process.stdout.write(`${chalk.green('Ok')}.\n`);
+  } catch (err) {
+    ++context.failed;
+    process.stdout.write(`${chalk.red('Failed:')} ${err.message}\n`);
+  }
 }
 
 //------------------------------------------------------------------------------
