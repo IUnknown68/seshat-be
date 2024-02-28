@@ -6,7 +6,12 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "scripts": {},
+  "bin": {
+    "seshat-txt2json": "bin/txt2json.js",
+    "seshat-add-embeddings": "bin/add-embeddings.js",
+    "seshat-json2redis": "bin/json2redis.js",
+    "seshat-import-redis": "bin/import-redis.js"
+  },
   "dependencies": {
     "argparse": "^2.0.1",
     "body-parser": "^1.20.2",

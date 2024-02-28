@@ -10,6 +10,7 @@ import {
   SEMSE_PORT,
   SEMSE_DOCUMENT_PREFIX,
   MAX_POST_BODY_LENGTH,
+  SEMSE_DOCUMENT_INDEX,
 } from './src/constants.js';
 
 import {
@@ -46,7 +47,7 @@ async function main() {
     await initOpenAi();
 
     context.redis = await initRedis();
-    await getIndex(true);
+    await getIndex(SEMSE_DOCUMENT_INDEX, SEMSE_DOCUMENT_PREFIX, true);
 
     await initExpress(context);
     await initRouting(context);
@@ -165,7 +166,7 @@ async function listen(server, hostname, port) {
 //------------------------------------------------------------------------------
 async function queryDb(text, size = 2, from = 0) {
   const embedding = await createEmbedding(text);
-  const docs = await retrieve(embedding, size, from);
+  const docs = await retrieve(SEMSE_DOCUMENT_INDEX, embedding, size, from);
   return docs.map((doc) => ({
     id: doc.id,
     ...doc.value,

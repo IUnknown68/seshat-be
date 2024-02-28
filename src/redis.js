@@ -7,17 +7,15 @@ import chalk from 'chalk';
 
 import {
   SEMSE_REDIS_URL,
-  SEMSE_DOCUMENT_INDEX,
-  SEMSE_DOCUMENT_PREFIX,
   DIMENSIONS,
 } from './constants.js';
 
 let redis = null;
 
 //------------------------------------------------------------------------------
-export async function retrieve(queryVector, size = 2, from = 0) {
+export async function retrieve(indexName, queryVector, size = 2, from = 0) {
   const result = await redis.ft.search(
-    SEMSE_DOCUMENT_INDEX,
+    indexName,
     `*=>[KNN ${from + size} @embedding $queryVector AS vectorScore]`,
     {
       PARAMS: {
@@ -36,16 +34,16 @@ export async function retrieve(queryVector, size = 2, from = 0) {
 }
 
 //------------------------------------------------------------------------------
-export async function getIndex(createIfNotExists = false) {
+export async function getIndex(indexName, prefix, createIfNotExists = false) {
   try {
-    return await redis.ft.info(SEMSE_DOCUMENT_INDEX);
+    return await redis.ft.info(indexName);
   } catch (err) { /* fall through */ }
 
   if (!createIfNotExists) {
     return null;
   }
 
-  await redis.ft.create(SEMSE_DOCUMENT_INDEX, {
+  await redis.ft.create(indexName, {
     title: SchemaFieldTypes.TEXT,
     body: SchemaFieldTypes.TEXT,
     date: {
@@ -62,10 +60,10 @@ export async function getIndex(createIfNotExists = false) {
   }, {
     ON: 'HASH',
     INDEX_TYPE: 'HASH',
-    PREFIX: `${SEMSE_DOCUMENT_PREFIX}:`,
+    PREFIX: `${prefix}:`,
   });
 
-  return redis.ft.info(SEMSE_DOCUMENT_INDEX);
+  return redis.ft.info(indexName);
 }
 
 //------------------------------------------------------------------------------
