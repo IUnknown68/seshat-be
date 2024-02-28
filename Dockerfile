@@ -10,6 +10,8 @@ WORKDIR /app
 COPY package.json index.js ./
 COPY src src
 
+RUN yarn install --production
+
 CMD ["index.js"]
 
 ENTRYPOINT ["node"]
