@@ -11,7 +11,14 @@ const knownArgs = {
   folder: [
     'folder',
     {
-      help: 'The folder from where to import documents.',
+      help: 'Source folder.',
+    },
+  ],
+  dest: [
+    '-d',
+    '--dest',
+    {
+      help: 'Destination folder. Defaults to source folder, in which the source file is mutated.',
     },
   ],
   force: [
@@ -19,6 +26,13 @@ const knownArgs = {
     '--force',
     {
       help: 'Overwrite existing documents.',
+      action: 'store_true',
+    },
+  ],
+  flatten: [
+    '--flatten',
+    {
+      help: 'Output a flat directory structure. Files will be named according to key.',
       action: 'store_true',
     },
   ],
@@ -69,7 +83,11 @@ async function parseArgs(args, options = {}) {
     parser.add_argument(...arg);
   }
 
-  return parser.parse_args();
+  const parsed = parser.parse_args();
+  if (args.includes('dest') && !parsed.dest) {
+    parsed.dest = parsed.folder;
+  }
+  return parsed;
 }
 
 export default parseArgs;

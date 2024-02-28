@@ -1,8 +1,8 @@
+#!/usr/bin/env node
 import 'dotenv/config';
 import {
   readFile,
   writeFile,
-  readdir,
   mkdir,
 } from 'node:fs/promises';
 import {
@@ -14,15 +14,17 @@ import {
   extname,
   basename,
   dirname,
+  relative,
 } from 'node:path';
 
 import chalk from 'chalk';
 
 import {
   initOpenAi,
-} from './src/gpt.js';
+} from '../src/gpt.js';
 
-import parseArgs from './src/parseArgs.js';
+import parseArgs from '../src/parseArgs.js';
+import createWalker from '../src/createWalker.js';
 
 const PROMPT = `Below is an article. Parse the article into a json object containing:
 
@@ -44,26 +46,34 @@ Here is the article:`;
 async function main() {
   const {
     folder,
+    dest,
     force,
-  } = await parseArgs(['folder', 'force'], {
+    simulate,
+  } = await parseArgs(['folder', 'dest', 'force', 'simulate'], {
     description: 'Parse text files into datasets.',
   });
 
   const openai = await initOpenAi();
-  const rootFolder = resolve(process.cwd(), folder);
 
-  const rootFolderIn = join(rootFolder, '000-md');
-  const rootFolderOut = join(rootFolder, '010-json');
+  const rootFolderIn = resolve(process.cwd(), folder);
+  const rootFolderOut = resolve(process.cwd(), dest);
 
   const context = {
     force,
+    simulate,
+
+    rootFolderIn,
+    rootFolderOut,
+
     openai,
+
     succeeded: 0,
     skipped: 0,
     failed: 0,
   };
 
-  await processFolder(rootFolderIn, rootFolderOut, '.', context);
+  const walker = createWalker(rootFolderIn, processFile, context);
+  await walker();
 
   process.stdout.write(`${chalk.whiteBright('Finished')}: ${chalk.greenBright(context.succeeded)} documents converted.`);
   if (context.failed > 0) {
@@ -76,44 +86,29 @@ async function main() {
 }
 
 //------------------------------------------------------------------------------
-async function processFolder(rootFolderIn, rootFolderOut, relativePath, context) {
-  const folderIn = join(rootFolderIn, relativePath);
-  const folderOut = join(rootFolderOut, relativePath);
-
-  await mkdir(folderOut, { recursive: true });
-
-  const files = await readdir(folderIn, { withFileTypes: true });
-  for (const file of files) {
-    const fileRelPath = join(relativePath, file.name);
-    if (file.isDirectory()) {
-      await processFolder(rootFolderIn, rootFolderOut, fileRelPath, context);
-    } else {
-      await processFile(rootFolderIn, rootFolderOut, fileRelPath, context);
-      /////////////////////////////////////
-      // return;
-      /////////////////////////////////////
-    }
-  }
-}
-
-//------------------------------------------------------------------------------
-async function processFile(rootFolderIn, rootFolderOut, relativePath, context) {
+async function processFile(rootFolder, relativePath, context) {
   process.stdout.write(`${chalk.cyan(relativePath)}... `);
   try {
     const newBasename = `${basename(relativePath, extname(relativePath))}.json`;
     const dstRelpath = join(dirname(relativePath), newBasename);
-    const dstFile = join(rootFolderOut, dstRelpath);
+    const dstFile = join(context.rootFolderOut, dstRelpath);
+    await mkdir(dirname(dstFile), { recursive: true });
+
     if (existsSync(dstFile) && !context.force) {
       process.stdout.write(`${chalk.yellowBright('Exists')}, skipping.\n`);
       ++context.skipped;
       return;
     }
 
-    const text = await readFile(join(rootFolderIn, relativePath), 'utf8');
-    const json = await txt2json(text, context);
-    await writeFile(dstFile, JSON.stringify(json, null, 2));
+    const text = await readFile(join(context.rootFolderIn, relativePath), 'utf8');
+    if (context.simulate) {
+      process.stdout.write(`${chalk.whiteBright(relative(context.rootFolderOut, dstFile))} ${chalk.yellowBright('Ok (simulated)')}.\n`);
+    } else {
+      const json = await txt2json(text, context);
+      await writeFile(dstFile, JSON.stringify(json, null, 2));
+      process.stdout.write(`${chalk.whiteBright(dstRelpath)} ${chalk.green('Ok')}.\n`);
+    }
 
-    process.stdout.write(`${chalk.whiteBright(dstRelpath)} ${chalk.green('Ok')}.\n`);
     ++context.succeeded;
   } catch (err) {
     ++context.failed;
