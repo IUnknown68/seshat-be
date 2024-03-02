@@ -51,9 +51,11 @@ async function main() {
     failed: 0,
   };
 
+  let n = 0;
   for (const key of keys) {
     process.stdout.write(`${chalk.cyan(key)}... `);
-    const filename = join(dest, `${key.replace(/:/gi, '_')}.json`);
+    //const filename = join(dest, `${key.replace(/:/gi, '_')}.json`);
+    const filename = join(dest, `${++n}.json`);
     if (existsSync(filename) && !force) {
       process.stdout.write(`${chalk.yellowBright('Exists')}, skipping.\n`);
       ++context.skipped;
